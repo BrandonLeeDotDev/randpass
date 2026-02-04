@@ -1,0 +1,38 @@
+[package]
+name = "randpass"
+version = "0.2.0"
+edition = "2024"
+authors = ["Brandon Lee"]
+description = "CLI password generator with interactive TUI and cryptographic-grade RNG"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BrandonLeeDotDev/randpass"
+readme = "README.md"
+keywords = ["password", "generator", "security", "cli"]
+categories = ["command-line-utilities"]
+
+[package.metadata.deb]
+maintainer = "Brandon Lee"
+copyright = "2024, Brandon Lee"
+license-file = ["LICENSE-MIT", "0"]
+extended-description = "Generates secure passwords via interactive TUI or CLI arguments. Supports bulk generation, clipboard output, custom character sets, and hex mode."
+section = "utils"
+priority = "optional"
+assets = [["target/release/randpass", "/usr/bin/randpass", "755"]]
+
+[package.metadata.generate-rpm]
+assets = [{ source = "target/release/randpass", dest = "/usr/bin/randpass", mode = "755" }]
+
+[[bin]]
+name = "rng_test"
+path = "rng/rng_test.rs"
+
+[dependencies]
+crossterm = "0.28"
+copypasta = "0.10.1"
+zeroize = "1.8"
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
