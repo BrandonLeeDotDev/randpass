@@ -1,0 +1,210 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Verify binary works
+        run: ./target/release/randpass -l 16 -n 1
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build .deb package
+        run: cargo deb
+
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm
+
+      - name: Build .rpm package
+        run: cargo generate-rpm
+
+      - name: Create tar.gz archive
+        run: |
+          mkdir -p randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux
+          cp target/release/randpass randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux/
+          cp LICENSE-MIT randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux/
+          cp LICENSE-APACHE randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux/
+          cp README.md randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux/
+          tar czvf randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux.tar.gz randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux/
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: target/debian/*.deb
+
+      - name: Upload .rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-package
+          path: target/generate-rpm/*.rpm
+
+      - name: Upload tar.gz artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: randpass-v${{ steps.get_version.outputs.version }}-x86_64-linux.tar.gz
+
+  package-appimage:
+    runs-on: ubuntu-latest
+    needs: build-and-package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: tarball
+
+      - name: Extract binary from tarball
+        run: |
+          tar xzf randpass-v${{ needs.build-and-package.outputs.version }}-x86_64-linux.tar.gz
+          mv randpass-v${{ needs.build-and-package.outputs.version }}-x86_64-linux/randpass .
+
+      - name: Install appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: Create AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp randpass AppDir/usr/bin/
+
+          cat > AppDir/randpass.desktop << 'EOF'
+          [Desktop Entry]
+          Name=randpass
+          Exec=randpass
+          Icon=randpass
+          Type=Application
+          Terminal=true
+          Categories=Utility;Security;
+          Comment=CLI password generator with interactive TUI
+          EOF
+          sed -i 's/^          //' AppDir/randpass.desktop
+
+          cat > AppDir/randpass.svg << 'EOF'
+          <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+            <rect width="256" height="256" fill="#2d3748"/>
+            <text x="128" y="160" font-family="monospace" font-size="120" fill="#48bb78" text-anchor="middle">*</text>
+          </svg>
+          EOF
+          sed -i 's/^          //' AppDir/randpass.svg
+
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          exec "${HERE}/usr/bin/randpass" "$@"
+          EOF
+          sed -i 's/^          //' AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+      - name: Build AppImage
+        run: |
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir randpass-v${{ needs.build-and-package.outputs.version }}-x86_64.AppImage
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: randpass-v${{ needs.build-and-package.outputs.version }}-x86_64.AppImage
+
+  generate-pkgbuild:
+    runs-on: ubuntu-latest
+    needs: build-and-package
+    steps:
+      - name: Generate PKGBUILD
+        run: |
+          cat > PKGBUILD << 'EOF'
+          # Maintainer: Brandon Lee <BrandonLeeDotDev>
+          pkgname=randpass
+          pkgver=${{ needs.build-and-package.outputs.version }}
+          pkgrel=1
+          pkgdesc="CLI password generator with interactive TUI and cryptographic-grade RNG"
+          arch=('x86_64')
+          url="https://github.com/BrandonLeeDotDev/randpass"
+          license=('MIT' 'Apache-2.0')
+          depends=('gcc-libs')
+          makedepends=('rust' 'cargo')
+          source=("$pkgname-$pkgver.tar.gz::https://github.com/BrandonLeeDotDev/randpass/archive/refs/tags/v$pkgver.tar.gz")
+          sha256sums=('SKIP')  # Replace with actual checksum for AUR submission
+
+          build() {
+              cd "$pkgname-$pkgver"
+              cargo build --release --locked
+          }
+
+          package() {
+              cd "$pkgname-$pkgver"
+              install -Dm755 "target/release/randpass" "$pkgdir/usr/bin/randpass"
+              install -Dm644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+              install -Dm644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+              install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+          }
+          EOF
+          sed -i 's/^          //' PKGBUILD
+
+      - name: Upload PKGBUILD artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkgbuild
+          path: PKGBUILD
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-and-package, package-appimage, generate-pkgbuild]
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/deb-package/*.deb
+            artifacts/rpm-package/*.rpm
+            artifacts/tarball/*.tar.gz
+            artifacts/appimage/*.AppImage
+            artifacts/pkgbuild/PKGBUILD
