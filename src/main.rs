@@ -63,9 +63,6 @@ fn install_signal_handlers() {
     }
 }
 
-// populates const CRYPT with a u128 random number
-// this will be used to encrypt saved credentials
-// crypt::generate!();
 #[derive(Debug, Clone)]
 pub struct Settings {
     pass_length: usize,
