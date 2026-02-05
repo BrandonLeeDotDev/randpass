@@ -7,6 +7,7 @@ use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
+use zeroize::Zeroize;
 
 const POOL_SIZE: usize = 32 * 1024 * 1024; // 32MB
 const POOL_MASK: usize = POOL_SIZE - 1;
@@ -39,6 +40,14 @@ pub fn init() {
 
     if pool_ptr.is_null() {
         panic!("urand: failed to allocate 32MB pool");
+    }
+
+    // Lock pool in memory to prevent swapping to disk
+    unsafe {
+        if libc::mlock(pool_ptr as *const libc::c_void, POOL_SIZE) != 0 {
+            // mlock failed - continue anyway, but pool may be swapped
+            // (requires CAP_IPC_LOCK or sufficient RLIMIT_MEMLOCK)
+        }
     }
 
     // Fill pool from /dev/urandom
@@ -88,11 +97,13 @@ pub fn shutdown() {
     // Give thread time to exit
     thread::sleep(Duration::from_millis(5));
 
-    // Free memory
+    // Zero and free memory
     unsafe {
         let ptr = POOL;
         if !ptr.is_null() {
             POOL = std::ptr::null_mut();
+            std::slice::from_raw_parts_mut(ptr, POOL_SIZE).zeroize();
+            libc::munlock(ptr as *const libc::c_void, POOL_SIZE);
             let layout = std::alloc::Layout::from_size_align(POOL_SIZE, 4096)
                 .expect("invalid layout constants");
             std::alloc::dealloc(ptr, layout);
@@ -106,6 +117,23 @@ pub fn shutdown() {
 #[inline]
 pub fn is_active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
+}
+
+/// Emergency zero for signal handlers - minimal, async-signal-safe.
+/// Does NOT free memory, just zeros it with volatile writes.
+#[inline(never)]
+pub unsafe fn emergency_zero() {
+    unsafe {
+        let ptr = POOL;
+        if !ptr.is_null() {
+            // Volatile writes in u64 chunks to prevent optimization
+            let ptr64 = ptr as *mut u64;
+            let count = POOL_SIZE / 8;
+            for i in 0..count {
+                std::ptr::write_volatile(ptr64.add(i), 0u64);
+            }
+        }
+    }
 }
 
 /// Returns a random u64 from the pool.

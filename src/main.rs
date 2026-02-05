@@ -54,12 +54,25 @@ extern "C" fn signal_handler(_: libc::c_int) {
     unsafe { libc::exit(130) }
 }
 
+/// Crash handler for SIGSEGV/SIGABRT - zero pool, then re-raise for core dump
+extern "C" fn crash_handler(sig: libc::c_int) {
+    unsafe {
+        // Emergency zero the urandom pool (async-signal-safe)
+        rand::urand::emergency_zero();
+        // Reset signal handler to default and re-raise for proper crash handling
+        libc::signal(sig, libc::SIG_DFL);
+        libc::raise(sig);
+    }
+}
+
 fn install_signal_handlers() {
     unsafe {
         libc::atexit(cleanup_on_exit);
         libc::signal(libc::SIGINT, signal_handler as *const () as libc::sighandler_t);
         libc::signal(libc::SIGTERM, signal_handler as *const () as libc::sighandler_t);
         libc::signal(libc::SIGHUP, signal_handler as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGSEGV, crash_handler as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGABRT, crash_handler as *const () as libc::sighandler_t);
     }
 }
 
