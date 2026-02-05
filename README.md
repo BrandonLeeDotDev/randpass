@@ -61,6 +61,12 @@ Settings persist to `~/.config/randpass/settings`.
 
 ## Installation
 
+### Cargo
+
+```bash
+cargo install randpass
+```
+
 ### Pre-built Packages
 
 Download from [GitHub Releases](https://github.com/BrandonLeeDotDev/randpass/releases/latest):
