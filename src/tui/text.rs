@@ -1,16 +1,18 @@
-use crate::Settings;
-use super::terminal::{
-    clear, flush, format_number, print_error, box_top, box_line, box_line_center, box_bottom,
-    box_opt, print_rule, RESET, UNDERLINE,
+use crate::settings::Settings;
+use crate::terminal::{
+    RESET, UNDERLINE, box_bottom, box_line, box_line_center, box_opt, box_top, clear, flush,
+    format_number, print_error, print_rule,
 };
 
 /// Format special chars as ['a', 'b', ...] with wrapping across multiple lines
 fn print_special_chars_wrapped(settings: &Settings) {
     let prefix = "  4) Special Character List: ";
-    let indent = "      ";  // continuation line indent
+    let indent = "      "; // continuation line indent
     let max_width = 70; // inner box width
 
-    let mut items: Vec<String> = settings.special_chars.iter()
+    let mut items: Vec<String> = settings
+        .special_chars
+        .iter()
         .map(|c| format!("'{}'", c))
         .collect();
 
@@ -75,25 +77,49 @@ pub fn print_help() {
     box_line("");
     box_line("OPTIONS:");
     box_line(" Password:");
-    box_opt("  -l, --length <N>", "Characters per password (default: 74)");
-    box_opt("  -n, --number <N>", "How many to generate. With --bytes, this is byte count and supports K/M/G suffixes.");
+    box_opt(
+        "  -l, --length <N>",
+        "Characters per password (default: 74)",
+    );
+    box_opt(
+        "  -n, --number <N>",
+        "How many to generate. With --bytes, this is byte count and supports K/M/G suffixes.",
+    );
     box_opt("      --hex", "Hex charset only (0-9, a-f)");
-    box_opt("      --no-special", "Alphanumeric only, no special characters");
+    box_opt(
+        "      --no-special",
+        "Alphanumeric only, no special characters",
+    );
     box_opt("      --special <CHARS>", "Override special character set");
     box_line("");
     box_line(" Output:");
-    box_opt("  -o, --output [FILE]", "Write to file (default: rand_pass.txt)");
+    box_opt(
+        "  -o, --output [FILE]",
+        "Write to file (default: rand_pass.txt)",
+    );
     box_opt("  -b, --board", "Copy to clipboard instead of printing");
-    box_opt("  -q, --quiet", "Suppress all output except passwords/bytes");
+    box_opt(
+        "  -q, --quiet",
+        "Suppress all output except passwords/bytes",
+    );
     box_line("");
     box_line(" Settings:");
-    box_opt("  -c, --command [FLAGS]", "Save flags as defaults. Run alone to clear.");
+    box_opt("  -c, --command", "Show saved command (alias for -c get)");
+    box_opt("  -c get", "Show saved command");
+    box_opt("  -c set [FLAGS]", "Save flags as default command");
+    box_opt("  -c unset", "Clear saved command");
     box_opt("  -d, --default", "Use default settings");
     box_opt("  -s, --saved", "Use saved settings from config file");
     box_line("");
     box_line(" Entropy:");
-    box_opt("  -u, --urandom", "Use /dev/urandom pool instead of hardware");
-    box_opt("      --bytes", "Output raw bytes. Use -n for limit, -o for file.");
+    box_opt(
+        "  -u, --urandom",
+        "Use /dev/urandom pool instead of hardware",
+    );
+    box_opt(
+        "      --bytes",
+        "Output raw bytes. Use -n for limit, -o for file.",
+    );
     box_line("");
     box_line(" Info:");
     box_opt("  -h, --help", "Display this help message");
@@ -142,7 +168,7 @@ pub fn print_main_menu(print_invalid: &mut bool) {
     flush();
 }
 
-pub fn print_settings_menu(settings: &Settings, print_error_code: i32, error_txt: &String) {
+pub fn print_settings_menu(settings: &Settings, print_error_code: i32, error_txt: &str) {
     clear();
     box_top("Settings Menu");
     box_line_center("Esc/CTRL+Q: cancel | CTRL+U: clear input");
@@ -150,31 +176,64 @@ pub fn print_settings_menu(settings: &Settings, print_error_code: i32, error_txt
 
     // General section
     box_line(&format!("{UNDERLINE}General{RESET}:"));
-    box_line(&format!("  1) Password Length: {}", format_number(settings.pass_length)));
-    box_line(&format!("  2) View Seed Strings: {}", settings.view_chars_str));
-    box_line(&format!("  3) Number of Passwords: {}", format_number(settings.number_of_passwords)));
+    box_line(&format!(
+        "  1) Password Length: {}",
+        format_number(settings.pass_length)
+    ));
+    box_line(&format!(
+        "  2) View Seed Strings: {}",
+        settings.view_chars_str
+    ));
+    box_line(&format!(
+        "  3) Number of Passwords: {}",
+        format_number(settings.number_of_passwords)
+    ));
     print_special_chars_wrapped(settings);
 
     // Character Density section
     box_line("");
     box_line(&format!("{UNDERLINE}Character Density Multiplier{RESET}:"));
-    box_line(&format!("  5) Special: {}", format_number(settings.special_char_density)));
-    box_line(&format!("  6) Numeric: {}", format_number(settings.numeric_char_density)));
-    box_line(&format!("  7) Lowercase: {}", format_number(settings.lowercase_char_density)));
-    box_line(&format!("  8) Uppercase: {}", format_number(settings.uppercase_char_density)));
+    box_line(&format!(
+        "  5) Special: {}",
+        format_number(settings.special_char_density)
+    ));
+    box_line(&format!(
+        "  6) Numeric: {}",
+        format_number(settings.numeric_char_density)
+    ));
+    box_line(&format!(
+        "  7) Lowercase: {}",
+        format_number(settings.lowercase_char_density)
+    ));
+    box_line(&format!(
+        "  8) Uppercase: {}",
+        format_number(settings.uppercase_char_density)
+    ));
 
     // Output section
     box_line("");
     box_line(&format!("{UNDERLINE}Output{RESET}:"));
-    box_line(&format!("  9) Password(s) to terminal: {}", settings.output_to_terminal));
-    box_line(&format!("  10) Password output file path: {}", settings.output_file_path));
-    box_line(&format!("  11) Skip Pre-Generation Countdown: {}", settings.skip_countdown));
+    box_line(&format!(
+        "  9) Password(s) to terminal: {}",
+        settings.output_to_terminal
+    ));
+    box_line(&format!(
+        "  10) Password output file path: {}",
+        settings.output_file_path
+    ));
+    box_line(&format!(
+        "  11) Skip Pre-Generation Countdown: {}",
+        settings.skip_countdown
+    ));
     box_line("      - Occurs when #3 (Number of Passwords) > 100");
 
     // Command section
     box_line("");
     box_line(&format!("{UNDERLINE}Command on start{RESET}:"));
-    box_line(&format!("  12) Command to run with 'randpass': {}", settings.cli_command));
+    box_line(&format!(
+        "  12) Command to run with 'randpass': {}",
+        settings.cli_command
+    ));
     box_line("      - Ex: -l 22 -n 1 (see help)");
 
     // Entropy section
@@ -191,7 +250,10 @@ pub fn print_settings_menu(settings: &Settings, print_error_code: i32, error_txt
 
     // Error messages (or blank line if no error)
     match print_error_code {
-        1 => print_error(&format!("Invalid input, please enter a number up to: {}...", isize::MAX)),
+        1 => print_error(&format!(
+            "Invalid input, please enter a number up to: {}...",
+            isize::MAX
+        )),
         2 => print_error("Invalid input, please enter 't' or 'f'..."),
         3 => print_error("Invalid input, please enter a valid file path..."),
         998 => print_error("Invalid input, please enter a valid menu option..."),

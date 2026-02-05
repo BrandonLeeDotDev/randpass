@@ -1,4 +1,4 @@
-//! urand - Fast `/dev/urandom` access via a 32MB pooled buffer with background refresh.
+//! Urandom pool - optional /dev/urandom entropy source via 32MB pooled buffer.
 
 #![allow(dead_code)]
 
@@ -9,48 +9,102 @@ use std::thread;
 use std::time::Duration;
 use zeroize::Zeroize;
 
+use crate::cli::prompts;
+
 const POOL_SIZE: usize = 32 * 1024 * 1024; // 32MB
 const POOL_MASK: usize = POOL_SIZE - 1;
 const CHUNK_SIZE: usize = 512 * 1024; // 512KB chunks
 
-/// Pool pointer. Written during init/cleanup, read during operation.
 static mut POOL: *mut u8 = std::ptr::null_mut();
-
-/// Global position counter for reading from pool.
 static READ_POS: AtomicUsize = AtomicUsize::new(0);
-
-/// Signal for background thread shutdown.
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
-
-/// Whether pool is currently active.
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+static DECLINED: AtomicBool = AtomicBool::new(false);
 
-/// Initialize the pool and start background refresh thread.
-#[cold]
-#[inline(never)]
-pub fn init() {
-    if ACTIVE.load(Ordering::Acquire) {
-        return;
+// =============================================================================
+// Public API
+// =============================================================================
+
+pub fn is_available() -> bool {
+    std::path::Path::new("/dev/urandom").exists()
+}
+
+pub fn is_active() -> bool {
+    ACTIVE.load(Ordering::Relaxed)
+}
+
+/// Enable urandom pool mode (initializes 32MB pool).
+/// Returns false if unavailable or user declined.
+pub fn enable() -> bool {
+    is_available() && init()
+}
+
+pub fn disable() {
+    shutdown()
+}
+
+/// Returns a random u64 from the pool.
+#[inline(always)]
+pub fn rand() -> u64 {
+    if !ACTIVE.load(Ordering::Relaxed) && (DECLINED.load(Ordering::Relaxed) || !init()) {
+        return 0;
     }
 
-    // Allocate 32MB page-aligned buffer
-    let layout = std::alloc::Layout::from_size_align(POOL_SIZE, 4096)
-        .expect("invalid layout constants");
+    let p = READ_POS.fetch_add(8, Ordering::Relaxed);
+    let pos = p.wrapping_add(p >> 25) & POOL_MASK;
+
+    unsafe { std::ptr::read_unaligned(POOL.add(pos) as *const u64) }
+}
+
+/// Emergency zero for signal handlers - minimal, async-signal-safe.
+#[inline(never)]
+pub unsafe fn emergency_zero() {
+    unsafe {
+        let ptr = POOL;
+        if !ptr.is_null() {
+            let ptr64 = ptr as *mut u64;
+            let count = POOL_SIZE / 8;
+            for i in 0..count {
+                std::ptr::write_volatile(ptr64.add(i), 0u64);
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Pool management
+// =============================================================================
+
+#[cold]
+#[inline(never)]
+fn init() -> bool {
+    if ACTIVE.load(Ordering::Acquire) {
+        return true;
+    }
+    if DECLINED.load(Ordering::Acquire) {
+        return false;
+    }
+
+    let layout =
+        std::alloc::Layout::from_size_align(POOL_SIZE, 4096).expect("invalid layout constants");
     let pool_ptr = unsafe { std::alloc::alloc(layout) };
 
     if pool_ptr.is_null() {
         panic!("urand: failed to allocate 32MB pool");
     }
 
-    // Lock pool in memory to prevent swapping to disk
-    unsafe {
-        if libc::mlock(pool_ptr as *const libc::c_void, POOL_SIZE) != 0 {
-            // mlock failed - continue anyway, but pool may be swapped
-            // (requires CAP_IPC_LOCK or sufficient RLIMIT_MEMLOCK)
+    let mlock_failed = unsafe { libc::mlock(pool_ptr as *const libc::c_void, POOL_SIZE) != 0 };
+
+    if mlock_failed {
+        prompts::mlock_failed();
+
+        if !prompts::mlock_continue_prompt() {
+            unsafe { std::alloc::dealloc(pool_ptr, layout) };
+            DECLINED.store(true, Ordering::Release);
+            return false;
         }
     }
 
-    // Fill pool from /dev/urandom
     let mut file = File::open("/dev/urandom").expect("urand: failed to open /dev/urandom");
     unsafe {
         file.read_exact(std::slice::from_raw_parts_mut(pool_ptr, POOL_SIZE))
@@ -62,7 +116,6 @@ pub fn init() {
     READ_POS.store(0, Ordering::Release);
     ACTIVE.store(true, Ordering::Release);
 
-    // Background thread continuously refreshes pool
     thread::spawn(move || {
         let mut file = match File::open("/dev/urandom") {
             Ok(f) => f,
@@ -83,21 +136,18 @@ pub fn init() {
             thread::sleep(Duration::from_millis(1000));
         }
     });
+
+    true
 }
 
-/// Shutdown the background thread and free the pool memory.
-pub fn shutdown() {
+fn shutdown() {
     if !ACTIVE.load(Ordering::Acquire) {
         return;
     }
 
-    // Signal thread to stop
     SHUTDOWN.store(true, Ordering::Release);
-
-    // Give thread time to exit
     thread::sleep(Duration::from_millis(5));
 
-    // Zero and free memory
     unsafe {
         let ptr = POOL;
         if !ptr.is_null() {
@@ -111,42 +161,4 @@ pub fn shutdown() {
     }
 
     ACTIVE.store(false, Ordering::Release);
-}
-
-/// Check if urand is currently active.
-#[inline]
-pub fn is_active() -> bool {
-    ACTIVE.load(Ordering::Relaxed)
-}
-
-/// Emergency zero for signal handlers - minimal, async-signal-safe.
-/// Does NOT free memory, just zeros it with volatile writes.
-#[inline(never)]
-pub unsafe fn emergency_zero() {
-    unsafe {
-        let ptr = POOL;
-        if !ptr.is_null() {
-            // Volatile writes in u64 chunks to prevent optimization
-            let ptr64 = ptr as *mut u64;
-            let count = POOL_SIZE / 8;
-            for i in 0..count {
-                std::ptr::write_volatile(ptr64.add(i), 0u64);
-            }
-        }
-    }
-}
-
-/// Returns a random u64 from the pool.
-#[inline(always)]
-pub fn rand() -> u64 {
-    if !ACTIVE.load(Ordering::Relaxed) {
-        init();
-    }
-
-    let p = READ_POS.fetch_add(8, Ordering::Relaxed);
-
-    // Lap offset: shift by 1 byte per 32MB to create new byte combinations on wrap
-    let pos = p.wrapping_add(p >> 25) & POOL_MASK;
-
-    unsafe { std::ptr::read_unaligned(POOL.add(pos) as *const u64) }
 }

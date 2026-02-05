@@ -14,8 +14,8 @@ Both entropy sources pass all tests. "Weak" results are borderline p-values that
 ## Building
 
 ```bash
-# Build the RNG test binary
-cargo build --release --bin rng_test
+# Build randpass
+cargo build --release
 
 # Build the BigCrush wrapper (requires TestU01)
 gcc -O3 -o bigcrush_wrapper rng/bigcrush_wrapper.c -ltestu01 -lprobdist -lmylib -lm
@@ -27,14 +27,14 @@ gcc -O3 -o bigcrush_wrapper rng/bigcrush_wrapper.c -ltestu01 -lprobdist -lmylib 
 
 Full battery (~30 minutes):
 ```bash
-./target/release/rng_test | dieharder -a -g 200 | tee rng/results/hw_dieharder.txt
-./target/release/rng_test -u | dieharder -a -g 200 | tee rng/results/urand_dieharder.txt
+randpass --bytes | dieharder -a -g 200 | tee rng/results/hw_dieharder.txt
+randpass --bytes -u | dieharder -a -g 200 | tee rng/results/urand_dieharder.txt
 ```
 
 With unbuffered output for real-time progress:
 ```bash
-stdbuf -oL ./target/release/rng_test | stdbuf -oL dieharder -a -g 200 2>&1 | tee rng/results/hw_dieharder.txt &
-stdbuf -oL ./target/release/rng_test -u | stdbuf -oL dieharder -a -g 200 2>&1 | tee rng/results/urand_dieharder.txt &
+stdbuf -oL randpass --bytes | stdbuf -oL dieharder -a -g 200 2>&1 | tee rng/results/hw_dieharder.txt &
+stdbuf -oL randpass --bytes -u | stdbuf -oL dieharder -a -g 200 2>&1 | tee rng/results/urand_dieharder.txt &
 ```
 
 ### TestU01 BigCrush
@@ -43,25 +43,25 @@ Requires TestU01 library installed. See install instructions below.
 
 SmallCrush (~10 seconds):
 ```bash
-./target/release/rng_test | ./bigcrush_wrapper --small
+randpass --bytes | ./bigcrush_wrapper --small
 ```
 
 Crush (~30 minutes):
 ```bash
-./target/release/rng_test | ./bigcrush_wrapper --medium
+randpass --bytes | ./bigcrush_wrapper --medium
 ```
 
 BigCrush (~4 hours):
 ```bash
-stdbuf -oL ./target/release/rng_test | stdbuf -oL ./bigcrush_wrapper -n 'rdtsc' 2>&1 | tee rng/results/hw_bigcrush.txt &
-stdbuf -oL ./target/release/rng_test -u | stdbuf -oL ./bigcrush_wrapper -n 'urandom' 2>&1 | tee rng/results/urand_bigcrush.txt &
+stdbuf -oL randpass --bytes | stdbuf -oL ./bigcrush_wrapper -n 'rdtsc' 2>&1 | tee rng/results/hw_bigcrush.txt &
+stdbuf -oL randpass --bytes -u | stdbuf -oL ./bigcrush_wrapper -n 'urandom' 2>&1 | tee rng/results/urand_bigcrush.txt &
 ```
 
 ### PractRand
 
 Runs until failure (can take hours to days):
 ```bash
-./target/release/rng_test | RNG_test stdin -tlmax 1TB
+randpass --bytes | RNG_test stdin -tlmax 1TB
 ```
 
 ## Installing TestU01
@@ -83,7 +83,6 @@ sudo ldconfig
 
 | File | Description |
 |------|-------------|
-| `rng_test.rs` | Test binary source - outputs random bytes to stdout |
 | `bigcrush_wrapper.c` | C wrapper for TestU01 BigCrush battery |
 | `results/hw_bigcrush.txt` | BigCrush results for hardware entropy |
 | `results/urand_bigcrush.txt` | BigCrush results for urandom entropy |

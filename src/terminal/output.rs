@@ -1,9 +1,9 @@
-//! Terminal utilities with proper state management
+//! Terminal output utilities.
 //!
-//! Handles ANSI codes, raw mode cleanup, and consistent output
+//! Box drawing, progress bars, number formatting, ANSI helpers.
 
+use crossterm::terminal::disable_raw_mode;
 use std::io::{self, Write};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 // ============================================================================
 // ANSI Color/Style Constants
@@ -17,18 +17,18 @@ pub const RED: &str = "\x1b[38;5;9m";
 // Terminal Control
 // ============================================================================
 
-/// Clear screen and move cursor to top-left
+/// Clear screen and move cursor to top-left.
 pub fn clear() {
     print!("\x1b[2J\x1b[3J\x1b[H");
     flush();
 }
 
-/// Flush stdout
+/// Flush stdout.
 pub fn flush() {
     let _ = io::stdout().flush();
 }
 
-/// Reset terminal to sane state (fixes staggered text issues)
+/// Reset terminal to sane state (fixes staggered text issues).
 pub fn reset_terminal() {
     let _ = disable_raw_mode();
     print!("\x1b[0m");
@@ -36,50 +36,18 @@ pub fn reset_terminal() {
 }
 
 // ============================================================================
-// Raw Mode Guard (RAII pattern)
-// ============================================================================
-
-/// Guard that ensures raw mode is disabled when dropped
-pub struct RawModeGuard {
-    was_enabled: bool,
-}
-
-impl RawModeGuard {
-    /// Enable raw mode, returning a guard that will disable it on drop
-    pub fn new() -> io::Result<Self> {
-        enable_raw_mode()?;
-        Ok(Self { was_enabled: true })
-    }
-
-    /// Manually disable raw mode (also happens on drop)
-    pub fn disable(&mut self) {
-        if self.was_enabled {
-            let _ = disable_raw_mode();
-            self.was_enabled = false;
-        }
-    }
-}
-
-impl Drop for RawModeGuard {
-    fn drop(&mut self) {
-        self.disable();
-    }
-}
-
-// ============================================================================
 // Styled Output Helpers
 // ============================================================================
 
-/// Print error message in red
+/// Print error message in red.
 pub fn print_error(msg: &str) {
     println!("{RED}{msg}{RESET}");
 }
 
-/// Print a horizontal rule (box style)
+/// Print a horizontal rule (box style).
 pub fn print_rule() {
     println!("├{}┤", "─".repeat(BOX_WIDTH - 2));
 }
-
 
 // ============================================================================
 // Number Formatting
@@ -89,7 +57,7 @@ pub fn format_number(num: usize) -> String {
     let s = num.to_string();
     let mut result = String::with_capacity(s.len() + s.len() / 3);
     for (i, c) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(c);
@@ -98,7 +66,7 @@ pub fn format_number(num: usize) -> String {
 }
 
 // ============================================================================
-// Box Drawing (73 char width to match menus)
+// Box Drawing (74 char width)
 // ============================================================================
 
 pub const BOX_WIDTH: usize = 74;
@@ -116,7 +84,6 @@ pub fn box_top(title: &str) {
 
 /// Print box content line: │ content                                        │
 pub fn box_line(content: &str) {
-    // Fixed inner width: 73 - 2 (borders) - 2 (padding) = 69
     let inner_width = BOX_WIDTH - 4;
     let display_len = console_width(content);
 
@@ -124,7 +91,6 @@ pub fn box_line(content: &str) {
         let padding = inner_width - display_len;
         println!("│ {}{} │", content, " ".repeat(padding));
     } else {
-        // Content too long - just print it (will overflow)
         println!("│ {} │", content);
     }
 }
@@ -138,7 +104,12 @@ pub fn box_line_center(content: &str) {
         let total_padding = inner_width - display_len;
         let left_pad = total_padding / 2;
         let right_pad = total_padding - left_pad;
-        println!("│ {}{}{} │", " ".repeat(left_pad), content, " ".repeat(right_pad));
+        println!(
+            "│ {}{}{} │",
+            " ".repeat(left_pad),
+            content,
+            " ".repeat(right_pad)
+        );
     } else {
         println!("│ {} │", content);
     }
@@ -149,21 +120,18 @@ pub fn box_bottom() {
     println!("└{}┘", "─".repeat(BOX_WIDTH - 2));
 }
 
-/// Print a help option with flag and description, auto-wrapping if needed
-/// flag_col_width: width of the flag column (including leading spaces)
+/// Print a help option with flag and description, auto-wrapping if needed.
 pub fn box_opt(flag: &str, desc: &str) {
-    let inner_width = BOX_WIDTH - 4; // 70
-    let flag_col = 27; // fixed width for flag column
-    let desc_col = inner_width - flag_col; // remaining for description
+    let inner_width = BOX_WIDTH - 4;
+    let flag_col = 27;
+    let desc_col = inner_width - flag_col;
 
-    // Pad or truncate flag to fixed width
     let flag_padded = if flag.len() < flag_col {
         format!("{}{}", flag, " ".repeat(flag_col - flag.len()))
     } else {
         flag[..flag_col].to_string()
     };
 
-    // Word-wrap description
     let words: Vec<&str> = desc.split_whitespace().collect();
     let mut lines: Vec<String> = Vec::new();
     let mut current_line = String::new();
@@ -183,7 +151,6 @@ pub fn box_opt(flag: &str, desc: &str) {
         lines.push(current_line);
     }
 
-    // Print first line with flag
     if let Some(first) = lines.first() {
         let padding = desc_col.saturating_sub(first.len());
         println!("│ {}{}{} │", flag_padded, first, " ".repeat(padding));
@@ -192,7 +159,6 @@ pub fn box_opt(flag: &str, desc: &str) {
         println!("│ {}{} │", flag_padded, " ".repeat(padding));
     }
 
-    // Print continuation lines
     let indent = " ".repeat(flag_col);
     for line in lines.iter().skip(1) {
         let padding = desc_col.saturating_sub(line.len());
@@ -200,7 +166,7 @@ pub fn box_opt(flag: &str, desc: &str) {
     }
 }
 
-/// Calculate display width accounting for ANSI escape codes
+/// Calculate display width accounting for ANSI escape codes.
 fn console_width(s: &str) -> usize {
     let mut width = 0;
     let mut in_escape = false;
@@ -218,28 +184,31 @@ fn console_width(s: &str) -> usize {
     width
 }
 
-/// Print centered text within box width
+/// Print centered text within box width.
 pub fn print_centered(text: &str) {
     let padding = BOX_WIDTH.saturating_sub(text.len()) / 2;
-    print!("{}{}{}\r\n", " ".repeat(padding), text, " ".repeat(BOX_WIDTH - padding - text.len()));
-    let _ = std::io::Write::flush(&mut std::io::stdout());
+    print!(
+        "{}{}{}\r\n",
+        " ".repeat(padding),
+        text,
+        " ".repeat(BOX_WIDTH - padding - text.len())
+    );
+    let _ = std::io::stdout().flush();
 }
 
 // ============================================================================
 // Progress Bar
 // ============================================================================
 
-/// Render a progress bar inside a box with centered text (3 lines) - raw mode compatible
+/// Render a progress bar inside a box with centered text (3 lines).
 pub fn progress_bar_box(percent: f32, stats: &str) {
-    use std::io::Write;
-    let inner_width = BOX_WIDTH - 2; // 72 chars inside the box
+    let inner_width = BOX_WIDTH - 2;
     let filled = if percent >= 100.0 {
         inner_width
     } else {
         ((percent / 100.0) * inner_width as f32) as usize
     };
 
-    // Center the stats text (use char count, not byte count)
     let text_chars: Vec<char> = stats.chars().collect();
     let text_len = text_chars.len();
     let padding = if text_len < inner_width {
@@ -248,7 +217,6 @@ pub fn progress_bar_box(percent: f32, stats: &str) {
         0
     };
 
-    // Build the content line with text centered
     let mut content: Vec<char> = vec![' '; inner_width];
     for (i, ch) in text_chars.iter().enumerate() {
         if padding + i < inner_width {
@@ -256,9 +224,9 @@ pub fn progress_bar_box(percent: f32, stats: &str) {
         }
     }
 
-    // Top border - use quadrant blocks for corners when filled
+    // Top border
     if filled > 0 {
-        print!("\r▗"); // Lower right quadrant for top-left corner
+        print!("\r▗");
         print!("{}", "▄".repeat(filled));
     } else {
         print!("\r┌");
@@ -267,14 +235,14 @@ pub fn progress_bar_box(percent: f32, stats: &str) {
         print!("{}", "─".repeat(inner_width - filled));
         print!("┐\r\n");
     } else {
-        print!("▖\r\n"); // Lower left quadrant for top-right corner
+        print!("▖\r\n");
     }
 
-    // Middle - use half blocks for borders to connect with fill
+    // Middle
     if filled > 0 {
-        print!("\r▐"); // Right half block = fills right side (toward content)
+        print!("\r▐");
         let filled_str: String = content[..filled].iter().collect();
-        print!("\x1b[7m{}\x1b[0m", filled_str); // Reverse video
+        print!("\x1b[7m{}\x1b[0m", filled_str);
     } else {
         print!("\r│");
     }
@@ -283,12 +251,12 @@ pub fn progress_bar_box(percent: f32, stats: &str) {
         print!("{}", unfilled_str);
         print!("│\r\n");
     } else {
-        print!("▌\r\n"); // Left half block = fills left side (toward content)
+        print!("▌\r\n");
     }
 
-    // Bottom border - use quadrant blocks for corners when filled
+    // Bottom border
     if filled > 0 {
-        print!("\r▝"); // Upper right quadrant for bottom-left corner
+        print!("\r▝");
         print!("{}", "▀".repeat(filled));
     } else {
         print!("\r└");
@@ -297,17 +265,16 @@ pub fn progress_bar_box(percent: f32, stats: &str) {
         print!("{}", "─".repeat(inner_width - filled));
         print!("┘\r\n");
     } else {
-        print!("▘\r\n"); // Upper left quadrant for bottom-right corner
+        print!("▘\r\n");
     }
 
     let _ = std::io::stdout().flush();
 }
 
-/// Render a countdown bar with bouncing grey spot and centered text (3 lines)
+/// Render a countdown bar with bouncing grey spot and centered text (3 lines).
 pub fn countdown_bar(spot_pos: usize, text: &str) {
-    let inner_width = BOX_WIDTH - 2; // 72 chars inside the box
+    let inner_width = BOX_WIDTH - 2;
 
-    // Center the text
     let text_chars: Vec<char> = text.chars().collect();
     let text_len = text_chars.len();
     let padding = if text_len < inner_width {
@@ -316,7 +283,6 @@ pub fn countdown_bar(spot_pos: usize, text: &str) {
         0
     };
 
-    // Build the content line with text centered and spot
     let mut content: Vec<char> = vec![' '; inner_width];
     for (i, ch) in text_chars.iter().enumerate() {
         if padding + i < inner_width {
@@ -324,24 +290,20 @@ pub fn countdown_bar(spot_pos: usize, text: &str) {
         }
     }
 
-    // Place the grey spot (if not overlapping text)
     let spot = spot_pos % inner_width;
 
-    // Top border
     print!("\r┌{}┐\r\n", "─".repeat(inner_width));
 
-    // Middle with spot
     print!("\r│");
     for (i, ch) in content.iter().enumerate() {
         if i == spot {
-            print!("\x1b[90m█\x1b[0m"); // Grey block
+            print!("\x1b[90m█\x1b[0m");
         } else {
             print!("{}", ch);
         }
     }
     print!("│\r\n");
 
-    // Bottom border
     print!("\r└{}┘\r\n", "─".repeat(inner_width));
 
     let _ = std::io::stdout().flush();
@@ -351,8 +313,7 @@ pub fn countdown_bar(spot_pos: usize, text: &str) {
 // Entropy Calculation
 // ============================================================================
 
-/// Calculate password entropy in bits
-/// entropy = length * log2(charset_size)
+/// Calculate password entropy in bits.
 pub fn calculate_entropy(password_length: usize, charset_size: usize) -> f64 {
     if charset_size == 0 {
         return 0.0;
@@ -360,7 +321,7 @@ pub fn calculate_entropy(password_length: usize, charset_size: usize) -> f64 {
     password_length as f64 * (charset_size as f64).log2()
 }
 
-/// Get entropy strength description
+/// Get entropy strength description.
 pub fn entropy_strength(bits: f64) -> &'static str {
     match bits as u32 {
         0..=35 => "Weak",
@@ -370,22 +331,24 @@ pub fn entropy_strength(bits: f64) -> &'static str {
     }
 }
 
-// ============================================================================
-// Entropy Source Quality
-// ============================================================================
-
-/// Get info about the entropy source
+/// Get info about the entropy source.
 pub fn entropy_source_info() -> &'static str {
     if crate::rand::is_urandom_enabled() {
         return "/dev/urandom (32MB pool) - High quality";
     }
 
     #[cfg(target_arch = "x86_64")]
-    { "rdtsc (CPU timestamp counter) - High quality" }
+    {
+        "rdtsc (CPU timestamp counter) - High quality"
+    }
 
     #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-    { "pmccntr (ARM cycle counter) - High quality" }
+    {
+        "pmccntr (ARM cycle counter) - High quality"
+    }
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-    { "/dev/urandom (32MB pool) - High quality" }
+    {
+        "/dev/urandom (32MB pool) - High quality"
+    }
 }

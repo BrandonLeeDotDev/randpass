@@ -30,8 +30,9 @@ randpass --bytes -n 100M | xxd | head    # 100MB to stdout
 randpass --bytes | dieharder -a -g 200   # Infinite stream for testing
 
 # Command mode (save defaults)
-randpass -c -l 20 -n 5                   # Future `randpass` runs use these flags
-randpass -c                              # Clear saved defaults
+randpass -c set -l 20 -n 5               # Save flags; future `randpass` uses them
+randpass -c                              # Show saved command
+randpass -c unset                        # Clear saved command
 ```
 
 Run `randpass -h` for all options.

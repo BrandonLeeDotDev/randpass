@@ -1,4 +1,4 @@
-use super::CliFlags;
+use super::{CliFlags, CommandMode};
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -29,15 +29,42 @@ pub fn parse(args: &[String]) -> Result<CliFlags, ParseError> {
             "-b" | "--board" => flags.clipboard = true,
             "-s" | "--saved" => flags.saved = true,
             "-d" | "--default" => flags.default = true,
-            "-c" | "--command" => flags.command = true,
+            "-c" | "--command" => {
+                // Check for subcommand: get, set, unset
+                if i + 1 < args.len() {
+                    match args[i + 1].as_str() {
+                        "get" => {
+                            flags.command = CommandMode::Get;
+                            i += 1;
+                        }
+                        "set" => {
+                            flags.command = CommandMode::Set;
+                            i += 1;
+                        }
+                        "unset" => {
+                            flags.command = CommandMode::Unset;
+                            i += 1;
+                        }
+                        _ => {
+                            // No subcommand, default to get
+                            flags.command = CommandMode::Get;
+                        }
+                    }
+                } else {
+                    // -c alone means get
+                    flags.command = CommandMode::Get;
+                }
+            }
             "--no-special" => flags.no_special = true,
             "--hex" => flags.hex = true,
             "-l" | "--length" => {
                 i += 1;
                 if i < args.len() {
-                    flags.length = Some(args[i].parse().map_err(|_| {
-                        ParseError::InvalidNumber(args[i].clone())
-                    })?);
+                    flags.length = Some(
+                        args[i]
+                            .parse()
+                            .map_err(|_| ParseError::InvalidNumber(args[i].clone()))?,
+                    );
                 }
             }
             "-n" | "--number" => {

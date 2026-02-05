@@ -1,5 +1,6 @@
-use crossterm::event::{read, Event, KeyCode, KeyModifiers};
-use super::terminal::{RawModeGuard, flush, reset_terminal, format_number};
+use crossterm::event::{Event, KeyCode, KeyModifiers, read};
+
+use crate::terminal::{RawModeGuard, flush, format_number, reset_terminal};
 
 /// Format a string of digits with comma separators
 fn format_digits(s: &str) -> String {

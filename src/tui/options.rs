@@ -4,13 +4,11 @@ use std::{
     process::exit,
 };
 
-use crate::{
-    Settings,
-    file_io::{load_settings_from_file, output_passwords},
-};
+use crate::pass::output::with_progress as output_passwords;
+use crate::settings::Settings;
+use crate::terminal::{clear, reset_terminal};
 
 use super::{
-    terminal::{clear, reset_terminal},
     enter_prompt, get_editable_input, get_numeric_input, print_file_exists, print_help,
     print_main_menu, print_settings_menu,
 };
@@ -21,10 +19,7 @@ pub fn gen_file_exists_menu(settings: &Settings) -> Option<File> {
     print_file_exists(&settings.output_file_path);
 
     loop {
-        let answer = match get_editable_input("Enter your choice", "") {
-            Some(s) => s,
-            None => return None,
-        };
+        let answer = get_editable_input("Enter your choice", "")?;
 
         let choice = answer.trim().to_lowercase();
         if choice == "o" {
@@ -46,7 +41,9 @@ pub fn gen_file_exists_menu(settings: &Settings) -> Option<File> {
             );
         } else {
             // Move up 2 lines (to blank line), clear it, print error, move down, clear prompt line
-            print!("\x1b[2A\x1b[2K\x1b[31mInvalid choice. Please enter 'a' or 'o'.\x1b[0m\n\x1b[2K");
+            print!(
+                "\x1b[2A\x1b[2K\x1b[31mInvalid choice. Please enter 'a' or 'o'.\x1b[0m\n\x1b[2K"
+            );
             let _ = std::io::stdout().flush();
         }
     }
@@ -56,11 +53,13 @@ pub fn gen_main_menu() {
     reset_terminal();
     clear();
 
-    let mut settings = Settings::default();
-
-    if let Err(e) = load_settings_from_file(&mut settings) {
-        println!("Error loading settings: {}", e);
-    }
+    let mut settings = match Settings::load_from_file() {
+        Ok(s) => s,
+        Err(e) => {
+            println!("Error loading settings: {}", e);
+            Settings::default()
+        }
+    };
 
     if settings.number_of_passwords > 100 {
         update_settings(&mut settings);
@@ -153,11 +152,17 @@ pub enum LoopAction {
     Continue,
 }
 
-fn menu_options(choice: i32, print_error: &mut i32, error_txt: &mut String, settings: &mut Settings) -> LoopAction {
+fn menu_options(
+    choice: i32,
+    print_error: &mut i32,
+    error_txt: &mut String,
+    settings: &mut Settings,
+) -> LoopAction {
     match choice {
         1 => {
             // pass length
-            if let Some(len) = get_numeric_input("Enter new password length", settings.pass_length) {
+            if let Some(len) = get_numeric_input("Enter new password length", settings.pass_length)
+            {
                 settings.pass_length = len;
             }
         }
@@ -176,7 +181,9 @@ fn menu_options(choice: i32, print_error: &mut i32, error_txt: &mut String, sett
         }
         3 => {
             // num of passwords
-            if let Some(num) = get_numeric_input("Enter number of passwords", settings.number_of_passwords) {
+            if let Some(num) =
+                get_numeric_input("Enter number of passwords", settings.number_of_passwords)
+            {
                 settings.number_of_passwords = num;
             }
         }
@@ -184,34 +191,43 @@ fn menu_options(choice: i32, print_error: &mut i32, error_txt: &mut String, sett
         4 => {
             // special chars
             let chars: String = settings.special_chars.clone().into_iter().collect();
-            let new_chars = match get_editable_input("Enter new special characters without spaces", &chars) {
-                Some(s) => s,
-                None => return Continue,
-            };
+            let new_chars =
+                match get_editable_input("Enter new special characters without spaces", &chars) {
+                    Some(s) => s,
+                    None => return Continue,
+                };
 
             settings.special_chars = new_chars.trim().chars().collect();
         }
         5 => {
             // special char density
-            if let Some(d) = get_numeric_input("Special char density", settings.special_char_density) {
+            if let Some(d) =
+                get_numeric_input("Special char density", settings.special_char_density)
+            {
                 settings.special_char_density = d;
             }
         }
         6 => {
             // numeric char density
-            if let Some(d) = get_numeric_input("Numeric char density", settings.numeric_char_density) {
+            if let Some(d) =
+                get_numeric_input("Numeric char density", settings.numeric_char_density)
+            {
                 settings.numeric_char_density = d;
             }
         }
         7 => {
             // lowercase char density
-            if let Some(d) = get_numeric_input("Lowercase char density", settings.lowercase_char_density) {
+            if let Some(d) =
+                get_numeric_input("Lowercase char density", settings.lowercase_char_density)
+            {
                 settings.lowercase_char_density = d;
             }
         }
         8 => {
             // uppercase char density
-            if let Some(d) = get_numeric_input("Uppercase char density", settings.uppercase_char_density) {
+            if let Some(d) =
+                get_numeric_input("Uppercase char density", settings.uppercase_char_density)
+            {
                 settings.uppercase_char_density = d;
             }
         }
@@ -285,11 +301,9 @@ fn menu_options(choice: i32, print_error: &mut i32, error_txt: &mut String, sett
             // entropy source toggle
             if crate::rand::is_urandom_enabled() {
                 crate::rand::disable_urandom();
-            } else {
-                if !crate::rand::enable_urandom() {
-                    *print_error = 999;
-                    *error_txt = "/dev/urandom not available on this system".to_string();
-                }
+            } else if !crate::rand::enable_urandom() {
+                *print_error = 999;
+                *error_txt = "/dev/urandom not available on this system".to_string();
             }
         }
         _ => {
@@ -307,7 +321,7 @@ fn command_options(
     settings: &mut Settings,
 ) -> LoopAction {
     // println!("{:?}", choice);
-    if choice == "" {
+    if choice.is_empty() {
         if settings.output_file_path.is_empty() && !settings.output_to_terminal {
             *print_error = 999;
             *error_txt = "You must output to the terminal or a file.".to_string();
@@ -326,11 +340,11 @@ fn command_options(
         return Break;
     }
 
-    match choice.chars().nth(0) {
+    match choice.chars().next() {
         Some('s') | Some('e') | Some('r') | Some('f') | Some('d') => {}
         _ => {
             *print_error = 0;
-            *error_txt = format!("Invalid selection");
+            *error_txt = "Invalid selection".to_string();
             return Continue;
         }
     }
@@ -339,9 +353,11 @@ fn command_options(
         match ch {
             's' => {
                 // save settings
-                *print_error = 0;
-                if let Err(e) = crate::file_io::save_settings_to_file(settings) {
+                if let Err(e) = settings.save_to_file() {
+                    *print_error = 1;
                     *error_txt = format!("Error saving settings: {}", e);
+                } else {
+                    *print_error = 0;
                 }
             }
             'e' => {}
@@ -352,9 +368,15 @@ fn command_options(
             }
             'f' => {
                 // load from file
-                *print_error = 0;
-                if let Err(e) = crate::file_io::load_settings_from_file(settings) {
-                    *error_txt = format!("Error loading settings: {}", e);
+                match Settings::load_from_file() {
+                    Ok(s) => {
+                        *print_error = 0;
+                        *settings = s;
+                    }
+                    Err(e) => {
+                        *print_error = 1;
+                        *error_txt = format!("Error loading settings: {}", e);
+                    }
                 }
             }
             'd' => {

@@ -1,3 +1,12 @@
+#[derive(Debug, Default, Clone, PartialEq)]
+pub enum CommandMode {
+    #[default]
+    None,
+    Get,
+    Set,
+    Unset,
+}
+
 #[derive(Debug, Default)]
 pub struct CliFlags {
     pub help: bool,
@@ -7,7 +16,7 @@ pub struct CliFlags {
     pub clipboard: bool,
     pub saved: bool,
     pub default: bool,
-    pub command: bool,
+    pub command: CommandMode,
     pub quiet: bool,
     pub no_special: bool,
     pub hex: bool,

@@ -1,6 +1,6 @@
 [package]
 name = "randpass"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 authors = ["Brandon Lee"]
 description = "CLI password generator with interactive TUI and cryptographic-grade RNG"
@@ -21,10 +21,6 @@ assets = [["target/release/randpass", "/usr/bin/randpass", "755"]]
 
 [package.metadata.generate-rpm]
 assets = [{ source = "target/release/randpass", dest = "/usr/bin/randpass", mode = "755" }]
-
-[[bin]]
-name = "rng_test"
-path = "rng/rng_test.rs"
 
 [dependencies]
 crossterm = "0.28"
