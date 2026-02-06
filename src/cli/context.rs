@@ -213,8 +213,8 @@ impl Context {
 
         if self.settings.to_clipboard {
             let passwords = pass::generate_batch(&self.settings, count);
-            if let (Some(ctx), Some(passwords)) = (self.clipboard.as_mut(), passwords) {
-                match ctx.set_contents(passwords) {
+            if let (Some(ctx), Some(mut passwords)) = (self.clipboard.as_mut(), passwords) {
+                match ctx.set_contents(passwords.clone()) {
                     Ok(_) => {
                         if let Ok(mut retrieved) = ctx.get_contents() {
                             retrieved.zeroize();
@@ -225,6 +225,7 @@ impl Context {
                         prompts::clipboard_error(&e.to_string());
                     }
                 }
+                passwords.zeroize();
             }
         } else if !self.settings.output_file_path.is_empty() && count >= 500_000 && !self.flags.quiet
         {

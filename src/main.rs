@@ -13,6 +13,7 @@ use settings::Settings;
 fn main() {
     exits::reset_terminal();
     exits::install_handlers();
+    unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
 
     let args: Vec<String> = env::args().collect();
 

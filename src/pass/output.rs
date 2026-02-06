@@ -230,6 +230,7 @@ pub fn with_progress(settings: &Settings) {
                 ));
                 box_bottom();
                 println!();
+                crate::rand::shutdown_urandom();
                 return;
             }
         }
@@ -314,6 +315,7 @@ pub fn with_progress(settings: &Settings) {
     }
     box_bottom();
     println!();
+    crate::rand::shutdown_urandom();
 }
 
 fn clear_last_n_lines(n: usize) {

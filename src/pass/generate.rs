@@ -10,19 +10,23 @@ use crate::rand::Rand;
 use crate::settings::Settings;
 
 /// Generate multiple passwords to clipboard buffer, file, or stdout.
+/// Urandom pool (if active) is shut down and zeroized after generation.
 pub fn generate_batch(settings: &Settings, count: usize) -> Option<String> {
     // Fast path: pre-build charset when not viewing seeds
-    if !settings.view_chars_str {
+    let result = if !settings.view_chars_str {
         let mut chars = charset::build(settings);
-        return generate_batch_fast(settings, count, &mut chars);
-    }
+        generate_batch_fast(settings, count, &mut chars)
+    } else {
+        // Slow path: rebuild charset each time (for debug seed view)
+        generate_batch_slow(settings, count)
+    };
 
-    // Slow path: rebuild charset each time (for debug seed view)
-    generate_batch_slow(settings, count)
+    crate::rand::shutdown_urandom();
+    result
 }
 
 fn generate_batch_fast(settings: &Settings, count: usize, chars: &mut [u8]) -> Option<String> {
-    let mut passwords = String::new();
+    let mut passwords = String::with_capacity(count * (settings.pass_length + 1));
     let mut buf = Vec::with_capacity(settings.pass_length + 1);
 
     let mut file: Option<super::SecureBufWriter<std::fs::File>> = None;
@@ -63,7 +67,7 @@ fn generate_batch_fast(settings: &Settings, count: usize, chars: &mut [u8]) -> O
 }
 
 fn generate_batch_slow(settings: &Settings, count: usize) -> Option<String> {
-    let mut passwords = String::new();
+    let mut passwords = String::with_capacity(count * (settings.pass_length + 1));
 
     let mut file: Option<super::SecureBufWriter<std::fs::File>> = None;
     if !settings.output_file_path.is_empty() {

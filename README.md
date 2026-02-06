@@ -108,7 +108,7 @@ cp target/release/randpass ~/.local/bin/
 
 ### PRNG
 
-Uses CPU timestamp counters (`rdtsc` on x86_64, `cntvct_el0` on ARM) mixed with a 10,000-prime table and SplitMix64 finalizer. With `-u`, uses a 32MB `/dev/urandom` pool with background refresh instead.
+Uses CPU timestamp counters (`rdtsc` on x86_64, `cntvct_el0` on ARM) mixed with a 10,000-prime table and SplitMix64 finalizer. With `-u`, uses a 2MB `/dev/urandom` pool instead. Pool read positions are scrambled per-lap using RNG state for unpredictable access patterns.
 
 ```
 Entropy Source → rotate(17) × prime[idx] ⊕ entropy → SplitMix64 → Output
@@ -120,11 +120,27 @@ Character pool built from enabled classes with configurable density multipliers 
 
 ### Security
 
-- Passwords zeroized after use
-- Direct `write_all()` I/O avoids format string allocations
-- Terminal state restored on signals
+**Memory protection**
+- Output buffers locked in RAM with `mlock`, preventing swap exposure
+- When using `/dev/urandom` (`-u`), the 2MB pool is also `mlock`'d
+- Core dumps disabled process-wide via `PR_SET_DUMPABLE(0)`
+- Passwords, RNG state, and buffers zeroized with `write_volatile`
+
+**Urandom pool lifecycle** (when `-u` is enabled)
+- Pool allocated lazily at generation start — nothing in memory until needed
+- Background refresh thread runs only during active generation
+- Pool zeroized and deallocated immediately on completion
+- Crash handlers (SIGSEGV/SIGABRT) emergency-zero the pool before exit
+
+**Signal handling**
+- SIGPIPE ignored for clean cleanup when piped (`randpass --bytes | head`)
+- Terminal state restored on SIGINT/SIGTERM/SIGHUP
+- All signal handlers use async-signal-safe operations only
+
+**I/O**
+- Direct `write_all()` avoids format string allocations in the hot path
+- Escape codes suppressed when stdout is not a TTY
 - Settings file stores configuration only, never passwords
-- Pipe-safe: escape codes suppressed when stdout is not a TTY
 
 ### Validation
 

@@ -63,4 +63,5 @@ pub fn output(limit: Option<usize>, file_path: Option<&str>) {
         let mut out = stdout.lock();
         write_bytes(&mut out, limit);
     }
+    crate::rand::shutdown_urandom();
 }

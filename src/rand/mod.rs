@@ -10,14 +10,14 @@ use std::sync::LazyLock;
 use primes::PRIMES;
 
 // Re-export urandom control
-pub use urand::{enable as enable_urandom, disable as disable_urandom};
+pub use urand::{enable as enable_urandom, disable as disable_urandom, shutdown as shutdown_urandom};
 
 pub fn is_urandom_enabled() -> bool {
-    urand::is_active()
+    urand::is_requested()
 }
 
 pub fn entropy_source() -> &'static str {
-    if urand::is_active() {
+    if urand::is_requested() {
         "/dev/urandom"
     } else {
         hw::source_name()
@@ -29,9 +29,9 @@ pub fn entropy_source() -> &'static str {
 // =============================================================================
 
 #[inline(always)]
-fn entropy() -> u64 {
-    if urand::is_active() {
-        urand::rand()
+fn entropy(hint: usize) -> u64 {
+    if urand::is_requested() {
+        urand::rand(hint)
     } else {
         hw::entropy()
     }
@@ -49,13 +49,13 @@ unsafe impl Sync for Rand {}
 impl Rand {
     #[inline]
     pub fn new() -> Self {
-        Rand(UnsafeCell::new(entropy() as usize))
+        Rand(UnsafeCell::new(entropy(0) as usize))
     }
 
     #[inline(always)]
     pub fn get() -> usize {
         let state = unsafe { *RAND.0.get() };
-        let ent = entropy() as usize;
+        let ent = entropy(state) as usize;
 
         // Mix entropy into prime selection
         let mixed = state ^ ent;

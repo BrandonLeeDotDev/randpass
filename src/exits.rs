@@ -77,6 +77,7 @@ pub fn install_handlers() {
             libc::SIGABRT,
             crash_handler as *const () as libc::sighandler_t,
         );
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
 }
 
