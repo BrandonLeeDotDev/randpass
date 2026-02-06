@@ -1,16 +1,24 @@
 //! Hardware entropy sources.
 
 #[cfg(target_arch = "x86_64")]
-pub fn source_name() -> &'static str { "rdtsc" }
+pub fn source_name() -> &'static str {
+    "rdtsc"
+}
 
 #[cfg(target_arch = "aarch64")]
-pub fn source_name() -> &'static str { "cycle counter" }
+pub fn source_name() -> &'static str {
+    "cycle counter"
+}
 
 #[cfg(target_arch = "arm")]
-pub fn source_name() -> &'static str { "cycle counter" }
+pub fn source_name() -> &'static str {
+    "cycle counter"
+}
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))]
-pub fn source_name() -> &'static str { "/dev/urandom" }
+pub fn source_name() -> &'static str {
+    "/dev/urandom"
+}
 
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]

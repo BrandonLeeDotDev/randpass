@@ -10,7 +10,9 @@ use std::sync::LazyLock;
 use primes::PRIMES;
 
 // Re-export urandom control
-pub use urand::{enable as enable_urandom, disable as disable_urandom, shutdown as shutdown_urandom};
+pub use urand::{
+    disable as disable_urandom, enable as enable_urandom, shutdown as shutdown_urandom,
+};
 
 pub fn is_urandom_enabled() -> bool {
     urand::is_requested()

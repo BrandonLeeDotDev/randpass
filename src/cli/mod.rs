@@ -7,9 +7,9 @@ mod parse;
 pub mod prompts;
 pub mod quiet;
 
-use context::Context;
 use crate::terminal::clear;
 use crate::tui::print_help;
+use context::Context;
 
 pub use bytes::output as output_bytes;
 pub use bytes::parse_byte_count;

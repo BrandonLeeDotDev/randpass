@@ -3,7 +3,7 @@
 use copypasta::{ClipboardContext, ClipboardProvider};
 use zeroize::Zeroize;
 
-use super::{output_bytes, parse_byte_count, prompts, quiet, CliFlags, CommandMode};
+use super::{CliFlags, CommandMode, output_bytes, parse_byte_count, prompts, quiet};
 use crate::pass;
 use crate::rand;
 use crate::settings::Settings;
@@ -104,7 +104,11 @@ impl Context {
 
     fn handle_bytes(&self) -> Result<(), Done> {
         if self.flags.bytes {
-            let limit = self.flags.number_raw.as_ref().and_then(|s| parse_byte_count(s));
+            let limit = self
+                .flags
+                .number_raw
+                .as_ref()
+                .and_then(|s| parse_byte_count(s));
             output_bytes(limit, self.flags.output.as_deref());
             return Err(Done);
         }
@@ -117,9 +121,7 @@ impl Context {
         if self.flags.command == CommandMode::Set {
             let command = self.args[1..]
                 .iter()
-                .filter(|a| {
-                    *a != "-c" && *a != "--command" && *a != "set"
-                })
+                .filter(|a| *a != "-c" && *a != "--command" && *a != "set")
                 .cloned()
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -209,7 +211,10 @@ impl Context {
     /// Generate passwords and handle output.
     pub fn generate_output(&mut self) {
         // Use explicit flag, else settings (which may come from saved command)
-        let count = self.flags.number.unwrap_or(self.settings.number_of_passwords.max(1));
+        let count = self
+            .flags
+            .number
+            .unwrap_or(self.settings.number_of_passwords.max(1));
 
         if self.settings.to_clipboard {
             let passwords = pass::generate_batch(&self.settings, count);
@@ -227,7 +232,9 @@ impl Context {
                 }
                 passwords.zeroize();
             }
-        } else if !self.settings.output_file_path.is_empty() && count >= 500_000 && !self.flags.quiet
+        } else if !self.settings.output_file_path.is_empty()
+            && count >= 500_000
+            && !self.flags.quiet
         {
             // Bulk file output: use TUI progress bar
             let mut cli_settings = self.settings.clone();

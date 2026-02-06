@@ -62,10 +62,10 @@ pub fn disable() {
 /// On first call, allocates pool, fills from /dev/urandom, starts refresh thread.
 #[inline(always)]
 pub fn rand(hint: usize) -> u64 {
-    if !ACTIVE.load(Ordering::Relaxed) {
-        if !REQUESTED.load(Ordering::Relaxed) || DECLINED.load(Ordering::Relaxed) || !init() {
-            return 0;
-        }
+    if !ACTIVE.load(Ordering::Relaxed)
+        && (!REQUESTED.load(Ordering::Relaxed) || DECLINED.load(Ordering::Relaxed) || !init())
+    {
+        return 0;
     }
 
     let p = READ_POS.fetch_add(8, Ordering::Relaxed);

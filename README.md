@@ -37,6 +37,8 @@ randpass -c unset                        # Clear saved command
 
 Run `randpass -h` for all options.
 
+<img src="imgs/help.png" alt="Help Menu" width="600">
+
 ## Interactive Mode
 
 Run without arguments for the TUI.

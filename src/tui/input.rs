@@ -2,6 +2,26 @@ use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 
 use crate::terminal::{RawModeGuard, flush, format_number, reset_terminal};
 
+/// Map a 1-based cursor position in raw digits to a 1-based position in the
+/// comma-formatted display string.
+fn digit_cursor_to_display(digits: &str, cursor_pos: usize) -> usize {
+    let n = digits.len();
+    if n == 0 || cursor_pos <= 1 {
+        return 1;
+    }
+    let digits_before = cursor_pos - 1;
+    let first_group = match n % 3 {
+        0 => 3,
+        r => r,
+    };
+    let commas = if digits_before <= first_group {
+        0
+    } else {
+        1 + (digits_before - first_group - 1) / 3
+    };
+    digits_before + commas + 1
+}
+
 /// Format a string of digits with comma separators
 fn format_digits(s: &str) -> String {
     let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -15,13 +35,14 @@ fn format_digits(s: &str) -> String {
     }
 }
 
-/// Get numeric input with live comma formatting
+/// Get numeric input with live comma formatting and cursor movement
 pub fn get_numeric_input(prompt: &str, initial_value: usize) -> Option<usize> {
     let mut digits = if initial_value > 0 {
         initial_value.to_string()
     } else {
         String::new()
     };
+    let mut cursor_pos = digits.len() + 1; // 1-based: 1 = before first digit
     let mut cancelled = false;
 
     let _guard = match RawModeGuard::new() {
@@ -54,15 +75,41 @@ pub fn get_numeric_input(prompt: &str, initial_value: usize) -> Option<usize> {
                     }
                     KeyCode::Char('u') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                         digits.clear();
+                        cursor_pos = 1;
                     }
                     KeyCode::Enter => {
                         break;
                     }
                     KeyCode::Backspace => {
-                        digits.pop();
+                        if cursor_pos > 1 {
+                            cursor_pos -= 1;
+                            digits.remove(cursor_pos - 1);
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if cursor_pos <= digits.len() {
+                            digits.remove(cursor_pos - 1);
+                        }
+                    }
+                    KeyCode::Left => {
+                        if cursor_pos > 1 {
+                            cursor_pos -= 1;
+                        }
+                    }
+                    KeyCode::Right => {
+                        if cursor_pos < digits.len() + 1 {
+                            cursor_pos += 1;
+                        }
+                    }
+                    KeyCode::Home => {
+                        cursor_pos = 1;
+                    }
+                    KeyCode::End => {
+                        cursor_pos = digits.len() + 1;
                     }
                     KeyCode::Char(c) if c.is_ascii_digit() => {
-                        digits.push(c);
+                        digits.insert(cursor_pos - 1, c);
+                        cursor_pos += 1;
                     }
                     _ => {}
                 }
@@ -73,6 +120,11 @@ pub fn get_numeric_input(prompt: &str, initial_value: usize) -> Option<usize> {
                 print!("\r{}: {}", prompt, formatted);
                 flush();
                 last_display_len = formatted.len();
+
+                // Position cursor within formatted display
+                let display_col = digit_cursor_to_display(&digits, cursor_pos);
+                print!("\x1b[{}G", prompt.len() + 2 + display_col);
+                flush();
             }
             Err(_) => break,
             _ => {}

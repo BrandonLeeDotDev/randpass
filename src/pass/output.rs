@@ -354,4 +354,3 @@ fn get_file(settings: &Settings) -> Option<File> {
         None
     }
 }
-

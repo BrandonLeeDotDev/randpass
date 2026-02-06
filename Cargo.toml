@@ -1,6 +1,6 @@
 [package]
 name = "randpass"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 authors = ["Brandon Lee"]
 description = "CLI password generator with interactive TUI and cryptographic-grade RNG"
