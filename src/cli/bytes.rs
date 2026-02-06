@@ -18,7 +18,7 @@ pub fn parse_byte_count(s: &str) -> Option<usize> {
 }
 
 fn write_bytes<W: Write>(out: &mut W, limit: Option<usize>) {
-    let mut buf = [0u8; 8192];
+    let mut buf = [0u8; 65536];
     let mut written: usize = 0;
 
     loop {

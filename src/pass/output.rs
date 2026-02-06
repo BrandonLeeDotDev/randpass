@@ -42,7 +42,7 @@ fn draw_header(entropy: f64, strength: &str, source: &str, chars: usize, setting
     box_bottom();
     println!();
 
-    if settings.number_of_passwords > 100 {
+    if settings.number_of_passwords > 500_000 {
         print_centered("[Esc/Ctrl+C] to interrupt");
         println!();
     }
@@ -108,7 +108,7 @@ pub fn with_progress(settings: &Settings) {
         }
     });
 
-    if !settings.skip_countdown && settings.number_of_passwords > 100 {
+    if !settings.skip_countdown && settings.number_of_passwords > 500_000 {
         use crate::rand::Rand;
 
         print!("\x1b[?25l");
@@ -197,9 +197,11 @@ pub fn with_progress(settings: &Settings) {
     };
 
     let mut buf = Vec::with_capacity(settings.pass_length + 1);
+    let render_interval = Duration::from_millis(50);
+    let mut last_render = Instant::now() - render_interval;
 
     for n in 0..settings.number_of_passwords {
-        if settings.number_of_passwords > 100 {
+        if settings.number_of_passwords > 500_000 {
             let should_interrupt = matches!(
                 rx.try_recv(),
                 Ok(KeyCode::Esc) | Err(TryRecvError::Disconnected)
@@ -259,22 +261,28 @@ pub fn with_progress(settings: &Settings) {
             drop(out);
             line.zeroize();
         } else {
-            let num = settings.number_of_passwords as f32;
-            let pct = ((n + 1) as f32 / num) * 100.0;
-            let elapsed = start_time.elapsed();
-            let avg = (elapsed.as_millis() as f32) / 1000.0 / (n as f32 + 1.0);
-            let left = num - (n as f32 + 1.0);
-            let eta = avg * left;
-            let stats = format!(
-                "{} of {} • {:.1}% • ETA: {:.1}s",
-                format_number(n + 1),
-                format_number(settings.number_of_passwords),
-                pct,
-                eta
-            );
-            print!("\x1b[3A");
-            progress_bar_box(pct, &stats);
-            std::io::stdout().flush().expect("Failed to flush stdout");
+            let now = Instant::now();
+            if now.duration_since(last_render) >= render_interval
+                || n + 1 == settings.number_of_passwords
+            {
+                last_render = now;
+                let num = settings.number_of_passwords as f32;
+                let pct = ((n + 1) as f32 / num) * 100.0;
+                let elapsed = start_time.elapsed();
+                let avg = (elapsed.as_millis() as f32) / 1000.0 / (n as f32 + 1.0);
+                let left = num - (n as f32 + 1.0);
+                let eta = avg * left;
+                let stats = format!(
+                    "{} of {} • {:.1}% • ETA: {:.1}s",
+                    format_number(n + 1),
+                    format_number(settings.number_of_passwords),
+                    pct,
+                    eta
+                );
+                print!("\x1b[3A");
+                progress_bar_box(pct, &stats);
+                std::io::stdout().flush().expect("Failed to flush stdout");
+            }
         }
 
         buf.zeroize();

@@ -225,7 +225,7 @@ pub fn print_settings_menu(settings: &Settings, print_error_code: i32, error_txt
         "  11) Skip Pre-Generation Countdown: {}",
         settings.skip_countdown
     ));
-    box_line("      - Occurs when #3 (Number of Passwords) > 100");
+    box_line("      - Occurs when #3 (Number of Passwords) > 500,000");
 
     // Command section
     box_line("");

@@ -226,7 +226,7 @@ impl Context {
                     }
                 }
             }
-        } else if !self.settings.output_file_path.is_empty() && count >= 50000 && !self.flags.quiet
+        } else if !self.settings.output_file_path.is_empty() && count >= 500_000 && !self.flags.quiet
         {
             // Bulk file output: use TUI progress bar
             let mut cli_settings = self.settings.clone();
