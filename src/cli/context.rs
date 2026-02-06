@@ -165,11 +165,11 @@ impl Context {
             self.settings.uppercase_char_density = 0;
             self.settings.lowercase_char_density = 0;
             self.settings.numeric_char_density = 0;
-            self.settings.special_chars = "0123456789abcdef".chars().collect();
+            self.settings.special_chars = b"0123456789abcdef".to_vec();
             self.settings.special_char_density = 1;
         }
         if let Some(ref chars) = self.flags.special {
-            self.settings.special_chars = chars.chars().collect();
+            self.settings.special_chars = chars.bytes().collect();
         }
 
         // Apply output file

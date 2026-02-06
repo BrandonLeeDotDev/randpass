@@ -13,7 +13,7 @@ fn print_special_chars_wrapped(settings: &Settings) {
     let mut items: Vec<String> = settings
         .special_chars
         .iter()
-        .map(|c| format!("'{}'", c))
+        .map(|&b| format!("'{}'", b as char))
         .collect();
 
     if items.is_empty() {
@@ -68,9 +68,9 @@ pub fn print_help() {
     box_line("     configure settings and generate passwords.");
     box_line("  2) Client: Pass flags directly (e.g., -l 20 -n 5) to generate");
     box_line("     passwords without the menu.");
-    box_line("  3) Command: Use -c to save flags as defaults. Future runs of");
-    box_line("     `randpass` will use those flags automatically. Clear with");
-    box_line("     `randpass -c`.");
+    box_line("  3) Command: Use -c set to save flags as defaults. Future runs");
+    box_line("     of `randpass` will use those flags automatically. Clear");
+    box_line("     with `randpass -c unset`.");
     box_line("");
     box_line("USAGE:");
     box_line("  randpass [OPTIONS]");
@@ -131,7 +131,7 @@ pub fn print_help() {
     box_line("  randpass -l 20 -n 3      Three passwords, 20 characters each");
     box_line("  randpass -l 32 --hex     32-character hex string");
     box_line("  randpass --no-special    Alphanumeric only");
-    box_line("  randpass -c -l 20        Save -l 20 as default");
+    box_line("  randpass -c set -l 20    Save -l 20 as default");
     box_line("  randpass --bytes -n 1M   1MB of random bytes to stdout");
     box_line("");
     box_bottom();

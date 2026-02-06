@@ -19,7 +19,7 @@ use crate::terminal::{
 };
 use crate::tui::gen_file_exists_menu;
 
-use super::{charset, generate};
+use super::{charset, generate, generate_from_charset};
 
 fn non_blocking_read(timeout: Duration) -> Option<Event> {
     let (tx, rx) = mpsc::channel();
@@ -71,7 +71,7 @@ pub fn with_progress(settings: &Settings) {
     clear();
     draw_header(entropy, strength, source, chars, settings);
 
-    let mut file = get_file(settings);
+    let mut file = get_file(settings).map(super::SecureBufWriter::new);
 
     if file.is_none() && !settings.output_file_path.is_empty() {
         clear();
@@ -189,6 +189,15 @@ pub fn with_progress(settings: &Settings) {
         println!();
     }
 
+    // Fast path: pre-build charset when not viewing seeds
+    let mut base_chars = if !settings.view_chars_str {
+        Some(charset::build(settings))
+    } else {
+        None
+    };
+
+    let mut buf = Vec::with_capacity(settings.pass_length + 1);
+
     for n in 0..settings.number_of_passwords {
         if settings.number_of_passwords > 100 {
             let should_interrupt = matches!(
@@ -223,16 +232,32 @@ pub fn with_progress(settings: &Settings) {
             }
         }
 
-        let mut password = generate(settings);
-        write_to_file(&password, &mut file);
+        match &mut base_chars {
+            Some(chars) => generate_from_charset(chars, settings.pass_length, &mut buf),
+            None => {
+                let mut pass = generate(settings);
+                buf.clear();
+                buf.extend_from_slice(pass.as_bytes());
+                pass.zeroize();
+            }
+        };
+
+        if let Some(ref mut f) = file {
+            buf.push(b'\n');
+            let _ = f.write_all(&buf);
+        }
 
         if settings.output_to_terminal {
+            // Prepend \r, append \r\n for TUI line output
+            let mut line = Vec::with_capacity(buf.len() + 3);
+            line.push(b'\r');
+            line.extend_from_slice(&buf);
+            line.extend_from_slice(b"\r\n");
             let stdout = std::io::stdout();
             let mut out = stdout.lock();
-            let _ = out.write_all(b"\r");
-            let _ = out.write_all(password.as_bytes());
-            let _ = out.write_all(b"\r\n");
+            let _ = out.write_all(&line);
             drop(out);
+            line.zeroize();
         } else {
             let num = settings.number_of_passwords as f32;
             let pct = ((n + 1) as f32 / num) * 100.0;
@@ -252,7 +277,7 @@ pub fn with_progress(settings: &Settings) {
             std::io::stdout().flush().expect("Failed to flush stdout");
         }
 
-        password.zeroize();
+        buf.zeroize();
     }
 
     let _ = close_tx.send(());
@@ -320,11 +345,3 @@ fn get_file(settings: &Settings) -> Option<File> {
     }
 }
 
-#[inline]
-fn write_to_file(password: &str, file: &mut Option<File>) {
-    if let Some(file) = file.as_mut() {
-        file.write_all(password.as_bytes())
-            .expect("Failed to write to file");
-        file.write_all(b"\n").expect("Failed to write to file");
-    }
-}

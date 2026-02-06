@@ -17,10 +17,10 @@ pub fn save(settings: &Settings) -> std::io::Result<()> {
     let special_chars_str = settings
         .special_chars
         .iter()
-        .map(|&c| match c {
-            ',' => "|,".to_string(),
-            '|' => "||".to_string(),
-            _ => c.to_string(),
+        .map(|&b| match b {
+            b',' => "|,".to_string(),
+            b'|' => "||".to_string(),
+            _ => (b as char).to_string(),
         })
         .collect::<Vec<String>>()
         .join("");
@@ -77,7 +77,7 @@ pub fn load(settings: &mut Settings) -> std::io::Result<()> {
             settings.number_of_passwords = parts[1].parse().unwrap_or(settings.number_of_passwords);
             settings.skip_countdown = parts[2].parse().unwrap_or(settings.skip_countdown);
             settings.view_chars_str = parts[3].parse().unwrap_or(settings.view_chars_str);
-            settings.special_chars = parts[4].chars().collect();
+            settings.special_chars = parts[4].bytes().collect();
             settings.randomize_seed_chars =
                 parts[5].parse().unwrap_or(settings.randomize_seed_chars);
             settings.special_char_density =

@@ -190,14 +190,14 @@ fn menu_options(
 
         4 => {
             // special chars
-            let chars: String = settings.special_chars.clone().into_iter().collect();
+            let chars: String = settings.special_chars.iter().map(|&b| b as char).collect();
             let new_chars =
                 match get_editable_input("Enter new special characters without spaces", &chars) {
                     Some(s) => s,
                     None => return Continue,
                 };
 
-            settings.special_chars = new_chars.trim().chars().collect();
+            settings.special_chars = new_chars.trim().bytes().collect();
         }
         5 => {
             // special char density
